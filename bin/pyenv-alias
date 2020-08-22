@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#
+# Summary: Create a alias for existed python installation using the pyenv-vznncv-alias plugin
+#
+# Usage: pyenv alias <source_name> <alias_name>
+#        pyenv alias --help
+#
+
+function log() {
+    echo "$*" >&2
+}
+function log_err() {
+    log "ERROR: $*"
+}
+function log_info() {
+    log "INFO: $*"
+}
+
+# check arguments
+source_name="$1"
+alias_name="$2"
+if [[ -z "$source_name" ]]; then
+    log_err "<source-installation-name> is missed"
+    log ""
+    pyenv-help --usage alias >&2
+    exit 1
+fi
+if [[ -z "$alias_name" ]]; then
+    log_err "<alias-name> is missed"
+    log ""
+    pyenv-help --usage alias >&2
+    exit 1
+fi
+if [[ "$source_name" == "$alias_name" ]]; then
+    log_err "alias and source name are same: $alias_name == $source_name"
+    exit 1
+fi
+
+# check that names are valid
+PYENV_VERSIONS_PATH="$PYENV_ROOT/versions"
+
+function get_alias_source_name() {
+    local alias_name="$1"
+    local link_path="$PYENV_VERSIONS_PATH/$alias_name"
+    local dst_name
+    local dst_basename
+    if [[ -L "$link_path" && -d "$link_path" ]]; then
+        dst_name=$(readlink "$link_path")
+        dst_basename=$(basename "$dst_name")
+        # return value only if link is relative
+        if [[ "$dst_name" == "$dst_basename" ]]; then
+            echo "$dst_name"
+        fi
+    fi
+}
+
+function is_alias_name() {
+    local name="$1"
+    local source_name
+    source_name=$(get_alias_source_name "$name")
+    if [[ -z "$source_name" ]]; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+source_path="$PYENV_VERSIONS_PATH/$source_name"
+alias_path="$PYENV_VERSIONS_PATH/$alias_name"
+# check that names are valid
+if [[ ! -d "$source_path" ]]; then
+    log_err "Source name \"$source_name\" doesn't exist"
+    exit 1
+fi
+if [[ -e "$alias_path" ]] && ! is_alias_name "$alias_name"; then
+    log_err "Destination name \"$alias_name\" exists and it isn't alias"
+    exit 1
+fi
+
+prev_source_name="$(get_alias_source_name "$alias_name")"
+if [[ -n "$prev_source_name" ]]; then
+    log_info "Update alias $alias_name: $prev_source_name -> $source_name"
+else
+    log_info "Create alias $alias_name: $source_name"
+fi
+# create symbolic link
+ln -snf "$source_name" "$alias_path"
+ret_code="$?"
+if [[ "$ret_code" -ne 0 ]]; then
+    log_err "Fail to create symbolic link: $alias_path -> $source_name"
+    exit "$ret_code"
+fi
+
+log_info "Complete"
